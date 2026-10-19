@@ -9,7 +9,7 @@ Download the binary for your OS from the [Releases](../../releases) page. It is 
 Or run it from source with [uv](https://docs.astral.sh/uv/):
 
 ```sh
-uvx --from git+https://github.com/<owner>/<repo> wpilog --help
+uvx --from git+https://github.com/tervay/log_reader wpilog --help
 ```
 
 On macOS, a downloaded binary may be blocked the first time it runs. To unblock it, run `xattr -d com.apple.quarantine wpilog-macos-*`.
