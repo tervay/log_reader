@@ -1,6 +1,5 @@
 import argparse
 import fnmatch
-import functools
 import hashlib
 import json
 import math
@@ -15,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 import orjson
-from wpiutil.log import DataLogReader
+from wpiutil.log import DataLogReader, DataLogRecord
 
 OWLET_INDEX = "https://redist.ctr-electronics.com/index.json"
 SCHEMA_PREFIX = "/.schema/struct:"
@@ -96,12 +95,64 @@ def decode_struct(schemas, name, data, pos=0):
     return out, pos
 
 
-def decode(record, type, schemas):
+def flatten(schemas, name):
+    fmt, shape = "", []
+    for ftype, fname, count, bits, enum in schemas[name]:
+        if bits or enum or ftype == "char":
+            return None
+        if ftype in PRIMS:
+            fmt += f"{count or ''}{PRIMS[ftype]}"
+            shape.append((fname, count, None))
+        elif sub := flatten(schemas, ftype):
+            fmt += sub[0] * (count or 1)
+            shape.append((fname, count, sub[1]))
+        else:
+            return None
+    return fmt, shape
+
+
+def build(shape, it):
+    out = {}
+    for fname, count, sub in shape:
+        if sub is None:
+            out[fname] = [next(it) for _ in range(count)] if count else next(it)
+        else:
+            out[fname] = [build(sub, it) for _ in range(count)] if count else build(sub, it)
+    return out
+
+
+def struct_decoder(schemas, type):
+    name, array = type[7:].removesuffix("[]"), type.endswith("[]")
+    flat = name in schemas and flatten(schemas, name)
+    if not flat or not flat[0]:
+        return lambda r: decode_generic(r, type, schemas)
+    s, shape = struct.Struct("<" + flat[0]), flat[1]
+    if array:
+        return lambda r: [build(shape, iter(v)) for v in s.iter_unpack(r.getRaw())]
+    return lambda r: build(shape, iter(s.unpack_from(r.getRaw())))
+
+
+def decoder(type, schemas):
+    if type in GETTERS:
+        fn = getattr(DataLogRecord, GETTERS[type])
+    elif type == "json":
+        fn = lambda r: json.loads(r.getString())
+    elif type.startswith("struct:"):
+        fn = struct_decoder(schemas, type)
+    else:
+        return lambda r: r.getRaw().hex()
+
+    def safe(r):
+        try:
+            return fn(r)
+        except (KeyError, ValueError, TypeError, struct.error):
+            return r.getRaw().hex()
+
+    return safe
+
+
+def decode_generic(record, type, schemas):
     try:
-        if type in GETTERS:
-            return getattr(record, GETTERS[type])()
-        if type == "json":
-            return json.loads(record.getString())
         if type.startswith("struct:"):
             name, data = type[7:].removesuffix("[]"), record.getRaw()
             if not type.endswith("[]"):
@@ -117,7 +168,7 @@ def decode(record, type, schemas):
 
 
 def emit(obj):
-    sys.stdout.buffer.write(orjson.dumps(obj) + b"\n")
+    sys.stdout.buffer.write(orjson.dumps(obj, option=orjson.OPT_APPEND_NEWLINE))
 
 
 def open_log(path):
@@ -127,38 +178,48 @@ def open_log(path):
     return reader
 
 
-def records(reader, schema=False):
-    entries = {}
-    for r in reader:
-        if r.isStart():
-            d = r.getStartData()
-            entries[d.entry] = {"name": d.name, "type": d.type, "metadata": d.metadata}
-        elif r.isSetMetadata():
-            d = r.getSetMetadataData()
-            if d.entry in entries:
-                entries[d.entry]["metadata"] = d.metadata
-        elif r.isFinish():
-            entries.pop(r.getFinishEntry(), None)
-        elif not r.isControl() and (e := entries.get(r.getEntry())) and e["name"].startswith("/.schema/") == schema:
-            yield r, e
-
-
 def struct_schemas(reader):
-    return {
-        e["name"][len(SCHEMA_PREFIX) :]: parse_schema(r.getString())
-        for r, e in records(reader, schema=True)
-        if e["name"].startswith(SCHEMA_PREFIX)
-    }
+    ids, schemas = {}, {}
+    for r in reader:
+        e = r.getEntry()
+        if e == 0:
+            if r.isStart() and (d := r.getStartData()).name.startswith(SCHEMA_PREFIX):
+                ids[d.entry] = d.name[len(SCHEMA_PREFIX) :]
+            elif r.isFinish():
+                ids.pop(r.getFinishEntry(), None)
+        elif e in ids:
+            schemas[ids[e]] = parse_schema(r.getString())
+    return schemas
 
 
 def info(path, name):
-    reader, stats = open_log(path), {}
-    for r, e in records(reader):
-        t = r.getTimestamp() / 1e6
-        s = stats.setdefault(e["name"], {**e, "count": 0, "first": t, "last": t})
-        s["count"] += 1
-        s["first"], s["last"] = min(s["first"], t), max(s["last"], t)
-    entries = sorted(stats.values(), key=lambda s: s["name"])
+    reader, live, stats = open_log(path), {}, {}
+    for r in reader:
+        e = r.getEntry()
+        if e == 0:
+            if r.isStart():
+                d = r.getStartData()
+                if not d.name.startswith("/.schema/"):
+                    s = stats.setdefault(d.name, {"name": d.name, "type": d.type, "metadata": d.metadata, "count": 0, "first": math.inf, "last": -math.inf})
+                    if not s["count"]:
+                        s.update(type=d.type, metadata=d.metadata)
+                    live[d.entry] = s
+            elif r.isSetMetadata():
+                d = r.getSetMetadataData()
+                if (s := live.get(d.entry)) and not s["count"]:
+                    s["metadata"] = d.metadata
+            elif r.isFinish():
+                live.pop(r.getFinishEntry(), None)
+        elif s := live.get(e):
+            t = r.getTimestamp()
+            s["count"] += 1
+            if t < s["first"]:
+                s["first"] = t
+            if t > s["last"]:
+                s["last"] = t
+    entries = sorted((s for s in stats.values() if s["count"]), key=lambda s: s["name"])
+    for s in entries:
+        s["first"], s["last"] = s["first"] / 1e6, s["last"] / 1e6
     emit(
         {
             "file": str(name),
@@ -171,17 +232,25 @@ def info(path, name):
 
 
 def read(path, patterns, start, end, limit):
-    reader, count = open_log(path), 0
+    reader, count, live = open_log(path), 0, {}
     schemas = struct_schemas(reader)
-    wanted = functools.cache(lambda name: not patterns or any(fnmatch.fnmatchcase(name, p) for p in patterns))
-    for r, e in records(reader):
-        t = r.getTimestamp() / 1e6
-        if not wanted(e["name"]) or not start <= t <= end:
-            continue
-        emit({"t": t, "name": e["name"], "value": decode(r, e["type"], schemas)})
-        count += 1
-        if count == limit:
-            return
+    for r in reader:
+        e = r.getEntry()
+        if e == 0:
+            if r.isStart():
+                d = r.getStartData()
+                wanted = not patterns or any(fnmatch.fnmatchcase(d.name, p) for p in patterns)
+                if wanted and not d.name.startswith("/.schema/"):
+                    live[d.entry] = (d.name, decoder(d.type, schemas))
+                else:
+                    live.pop(d.entry, None)
+            elif r.isFinish():
+                live.pop(r.getFinishEntry(), None)
+        elif (entry := live.get(e)) and start <= (t := r.getTimestamp() / 1e6) <= end:
+            emit({"t": t, "name": entry[0], "value": entry[1](r)})
+            count += 1
+            if count == limit:
+                return
 
 
 def owlet_platform():
