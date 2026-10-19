@@ -69,7 +69,7 @@ def log_file(tmp_path_factory):
 
 
 def run(*args):
-    result = subprocess.run([sys.executable, SCRIPT, *map(str, args)], capture_output=True, text=True, check=True)
+    result = subprocess.run([sys.executable, SCRIPT, *map(str, args)], capture_output=True, encoding="utf-8", check=True)
     return result.stdout
 
 
