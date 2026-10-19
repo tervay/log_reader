@@ -300,7 +300,7 @@ def hoot_to_wpilog(hoot, tmp):
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="wpilog", description="Read WPILib .wpilog or CTRE .hoot files as JSON.")
+    parser = argparse.ArgumentParser(prog="wpilog2json", description="Read WPILib .wpilog or CTRE .hoot files as JSON.")
     sub = parser.add_subparsers(dest="command", required=True)
     info_cmd = sub.add_parser("info", help="list entries with type, metadata, count and time range")
     info_cmd.add_argument("file", type=Path)

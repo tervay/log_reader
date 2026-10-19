@@ -1,4 +1,4 @@
-# wpilog
+# wpilog2json
 
 A small command-line tool that reads WPILib `.wpilog` files, and CTRE `.hoot` files, and prints JSON. It is built for AI agents (and people) who debug robot code from logs. All output can be piped straight into `jq`.
 
@@ -9,16 +9,16 @@ Download the binary for your OS from the [Releases](../../releases) page. It is 
 Or run it from source with [uv](https://docs.astral.sh/uv/):
 
 ```sh
-uvx --from git+https://github.com/tervay/log_reader wpilog --help
+uvx --from git+https://github.com/tervay/log_reader wpilog2json --help
 ```
 
-On macOS, a downloaded binary may be blocked the first time it runs. To unblock it, run `xattr -d com.apple.quarantine wpilog-macos-*`.
+On macOS, a downloaded binary may be blocked the first time it runs. To unblock it, run `xattr -d com.apple.quarantine wpilog2json-macos-*`.
 
 ## Usage
 
 ```sh
-wpilog info LOG
-wpilog read LOG [-e GLOB ...] [--start SEC] [--end SEC] [--limit N]
+wpilog2json info LOG
+wpilog2json read LOG [-e GLOB ...] [--start SEC] [--end SEC] [--limit N]
 ```
 
 `info` prints one JSON object that lists every entry in the log:
@@ -41,10 +41,10 @@ wpilog read LOG [-e GLOB ...] [--start SEC] [--end SEC] [--limit N]
 ### Examples
 
 ```sh
-wpilog info match.wpilog | jq -r '.entries[] | "\(.name)\t\(.type)\t\(.count)"'
-wpilog read match.wpilog -e '/Drive/*' --start 20 --end 25
-wpilog read match.wpilog -e '/RealOutputs/Odometry/RobotPose' | jq -c '[.t, .value.translation.x, .value.translation.y]'
-wpilog read match.wpilog -e '/DriverStation/Enabled' | jq -s 'map(select(.value)) | first'
+wpilog2json info match.wpilog | jq -r '.entries[] | "\(.name)\t\(.type)\t\(.count)"'
+wpilog2json read match.wpilog -e '/Drive/*' --start 20 --end 25
+wpilog2json read match.wpilog -e '/RealOutputs/Odometry/RobotPose' | jq -c '[.t, .value.translation.x, .value.translation.y]'
+wpilog2json read match.wpilog -e '/DriverStation/Enabled' | jq -s 'map(select(.value)) | first'
 ```
 
 ### How values are printed
@@ -61,13 +61,13 @@ Values that JSON can't represent (NaN and ±Infinity) are printed as `null`. Err
 
 ## Hoot files
 
-When you pass a `.hoot` file, `wpilog` converts it to wpilog with CTRE's [owlet](https://docs.ctr-electronics.com/cli-tools.html), then reads the result. The tool picks the owlet version that matches the log and downloads it from CTRE the first time you need it. The download goes into the same folder as the `wpilog` executable, as `owlet-<version>-C<compliancy>`, and later runs reuse it. To get a newer owlet, delete that file. Owlet is CTRE software, covered by [CTRE's license](https://raw.githubusercontent.com/CrossTheRoadElec/Phoenix-Releases/refs/heads/master/CTRE_LICENSE.txt).
+When you pass a `.hoot` file, `wpilog2json` converts it to wpilog with CTRE's [owlet](https://docs.ctr-electronics.com/cli-tools.html), then reads the result. The tool picks the owlet version that matches the log and downloads it from CTRE the first time you need it. The download goes into the same folder as the `wpilog2json` executable, as `owlet-<version>-C<compliancy>`, and later runs reuse it. To get a newer owlet, delete that file. Owlet is CTRE software, covered by [CTRE's license](https://raw.githubusercontent.com/CrossTheRoadElec/Phoenix-Releases/refs/heads/master/CTRE_LICENSE.txt).
 
 ## Development
 
 ```sh
 uv run pytest
-uv run pyinstaller --onefile --name wpilog --collect-binaries native.wpiutil wpilog.py
+uv run pyinstaller --onefile --name wpilog2json --collect-binaries native.wpiutil wpilog2json.py
 ```
 
 Push a tag such as `v0.2.0` to build binaries for Linux (x86_64 and arm64), Windows, and macOS (arm64 and x86_64) and attach them to a GitHub release.

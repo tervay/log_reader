@@ -11,11 +11,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, name: wpilog-linux-x86_64 }
-          - { os: ubuntu-24.04-arm, name: wpilog-linux-arm64 }
-          - { os: windows-latest, name: wpilog-windows-x86_64.exe }
-          - { os: macos-latest, name: wpilog-macos-arm64 }
-          - { os: macos-15-intel, name: wpilog-macos-x86_64 }
+          - { os: ubuntu-latest, name: wpilog2json-linux-x86_64 }
+          - { os: ubuntu-24.04-arm, name: wpilog2json-linux-arm64 }
+          - { os: windows-latest, name: wpilog2json-windows-x86_64.exe }
+          - { os: macos-latest, name: wpilog2json-macos-arm64 }
+          - { os: macos-15-intel, name: wpilog2json-macos-x86_64 }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -24,8 +24,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv run pytest -q
-      - run: uv run pyinstaller --onefile --name wpilog --collect-binaries native.wpiutil wpilog.py
-      - run: mv dist/wpilog* dist/${{ matrix.name }}
+      - run: uv run pyinstaller --onefile --name wpilog2json --collect-binaries native.wpiutil wpilog2json.py
+      - run: mv dist/wpilog2json* dist/${{ matrix.name }}
       - run: dist/${{ matrix.name }} --help
       - uses: actions/upload-artifact@v4
         with:

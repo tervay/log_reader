@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 import wpiutil
 
-import wpilog
+import wpilog2json
 
-SCRIPT = Path(__file__).with_name("wpilog.py")
+SCRIPT = Path(__file__).with_name("wpilog2json.py")
 INNER = "double x;double y"
 OUTER = "Inner pos; enum {OFF=0, ON=1} int8 mode; uint8 a:3; uint8 b:5; bool c:1; int16 s:4; char tag[4]; float vals[2]"
 OUTER_BYTES = struct.pack("<ddbBBh4s2f", 1.5, -2.0, 1, 5 | 17 << 3, 1, 13, b"ab", 0.5, 2.5)
@@ -129,9 +129,9 @@ def test_pick_owlet():
         {"Version": "26.10.0", "Compliancy": 19},
         {"Version": "26.70.0", "Compliancy": 21},
     ]}]}
-    assert wpilog.pick_owlet(index, 19)["Version"] == "26.10.0"
+    assert wpilog2json.pick_owlet(index, 19)["Version"] == "26.10.0"
     with pytest.raises(SystemExit):
-        wpilog.pick_owlet(index, 5)
+        wpilog2json.pick_owlet(index, 5)
 
 
 @pytest.mark.parametrize("system, machine, key", [
@@ -141,6 +141,6 @@ def test_pick_owlet():
     ("Windows", "AMD64", "windowsx86-64"),
 ])
 def test_owlet_platform(monkeypatch, system, machine, key):
-    monkeypatch.setattr(wpilog.platform, "system", lambda: system)
-    monkeypatch.setattr(wpilog.platform, "machine", lambda: machine)
-    assert wpilog.owlet_platform() == key
+    monkeypatch.setattr(wpilog2json.platform, "system", lambda: system)
+    monkeypatch.setattr(wpilog2json.platform, "machine", lambda: machine)
+    assert wpilog2json.owlet_platform() == key
