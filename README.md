@@ -14,6 +14,8 @@ uvx --from git+https://github.com/tervay/log_reader wpilog2json --help
 
 On macOS, a downloaded binary may be blocked the first time it runs. To unblock it, run `xattr -d com.apple.quarantine wpilog2json-macos-*`.
 
+The examples below use [jq](https://jqlang.org/). On Windows, install it with `winget install jqlang.jq`, then open a new terminal.
+
 ## Usage
 
 ```sh
